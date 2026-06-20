@@ -1,0 +1,2 @@
+import Link from 'next/link'
+export default function Home(){return <main className="wrap"><div className="card"><h1>Association Expense Tracker</h1><p className="muted">Mobile-first expense entry for treasurer and view-only monthly summary for residents.</p><div className="nav"><Link className="btn" href="/admin">Admin / Treasurer</Link><Link className="btn secondary" href="/resident">Resident View</Link></div></div></main>}
