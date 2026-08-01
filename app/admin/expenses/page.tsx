@@ -1,15 +1,77 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { money, ym } from '@/lib/money'
+import { EXPENSE_CATEGORIES } from '@/lib/categories'
 
 type Expense={id:string,expense_date:string,category:string,vendor_name:string,amount:number,payment_mode:string,paid_by:string,description:string,bill_url:string,status:string}
+
+const emptyForm={id:'',expense_date:'',category:EXPENSE_CATEGORIES[0]||'',vendor_name:'',amount:'',payment_mode:'UPI',paid_by:'',description:'',bill_url:'',status:'approved'}
+
 export default function Expenses(){
- const [month,setMonth]=useState(ym()); const [items,setItems]=useState<Expense[]>([]); const [msg,setMsg]=useState(''); const [balance,setBalance]=useState<any>(null)
- async function load(){const r=await fetch(`/api/admin/expenses?month=${month}`); const j=await r.json(); setItems(j.expenses||[]); const br=await fetch(`/api/admin/monthly-balance?month=${month}`); const bj=await br.json(); setBalance(bj.balance)}
+ const [month,setMonth]=useState(ym())
+ const [items,setItems]=useState<Expense[]>([])
+ const [msg,setMsg]=useState('')
+ const [form,setForm]=useState<any>(emptyForm)
+ const [isEditing,setIsEditing]=useState(false)
+
+ async function load(){
+  const r=await fetch(`/api/admin/expenses?month=${month}`)
+  const j=await r.json()
+  setItems(j.expenses||[])
+ }
  useEffect(()=>{load()},[month])
- async function submit(e:React.FormEvent<HTMLFormElement>){e.preventDefault(); setMsg('Saving...'); const fd=new FormData(e.currentTarget); const body=Object.fromEntries(fd.entries()); const r=await fetch('/api/admin/expenses',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); if(r.ok){setMsg('Expense saved'); e.currentTarget.reset(); load()} else setMsg('Could not save')}
- async function saveBalance(e:React.FormEvent<HTMLFormElement>){e.preventDefault(); const fd=new FormData(e.currentTarget); const r=await fetch('/api/admin/monthly-balance',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.fromEntries(fd.entries()))}); setMsg(r.ok?'Monthly balance saved':'Could not save balance'); load()}
+
+ function updateField(name:string,value:string){setForm((f:any)=>({...f,[name]:value}))}
+ function resetForm(){setForm(emptyForm); setIsEditing(false); setMsg('')}
+ function editExpense(x:Expense){
+  setForm({...x, amount:String(x.amount||'')})
+  setIsEditing(true)
+  window.scrollTo({top:0,behavior:'smooth'})
+ }
+
+ async function submit(e:React.FormEvent<HTMLFormElement>){
+  e.preventDefault()
+  setMsg(isEditing?'Updating...':'Saving...')
+  const method=isEditing?'PUT':'POST'
+  const r=await fetch('/api/admin/expenses',{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(form)})
+  if(r.ok){setMsg(isEditing?'Expense updated':'Expense saved'); resetForm(); load()} else {const j=await r.json().catch(()=>({})); setMsg(j.error||'Could not save')}
+ }
+
+ async function deleteExpense(x:Expense){
+  const ok=window.confirm(`Delete this expense?\n\n${x.category} - ${money(Number(x.amount))}\nThis cannot be undone.`)
+  if(!ok) return
+  setMsg('Deleting...')
+  const r=await fetch(`/api/admin/expenses?id=${encodeURIComponent(x.id)}`,{method:'DELETE'})
+  if(r.ok){setMsg('Expense deleted'); load()} else {const j=await r.json().catch(()=>({})); setMsg(j.error||'Could not delete')}
+ }
+
  const total=items.reduce((s,x)=>s+Number(x.amount),0)
  const csv='Date,Category,Vendor,Amount,Payment Mode,Paid By,Description,Status\n'+items.map(x=>[x.expense_date,x.category,x.vendor_name,x.amount,x.payment_mode,x.paid_by,x.description,x.status].map(v=>`"${String(v||'').replaceAll('"','""')}"`).join(',')).join('\n')
- return <main className="wrap"><div className="header"><div><h1>Expenses</h1><p className="muted">Mobile-friendly expense entry.</p></div><a className="btn secondary" href="/admin">Back</a></div><div className="card"><h2>Monthly Balance</h2><form onSubmit={saveBalance} className="grid"><input type="hidden" name="month" value={month}/><div className="grid2"><div><label>Opening Balance</label><input name="opening_balance" type="number" step="0.01" defaultValue={balance?.opening_balance||0}/></div><div><label>Maintenance Collected</label><input name="maintenance_collected" type="number" step="0.01" defaultValue={balance?.maintenance_collected||0}/></div></div><div className="grid2"><div><label>Other Income</label><input name="other_income" type="number" step="0.01" defaultValue={balance?.other_income||0}/></div><div><label>Notes</label><input name="notes" defaultValue={balance?.notes||''}/></div></div><button className="btn secondary">Save Monthly Balance</button></form></div><div className="card"><h2>Add Expense</h2><form onSubmit={submit} className="grid"><div className="grid2"><div><label>Date</label><input name="expense_date" type="date" required/></div><div><label>Amount</label><input name="amount" type="number" min="0" step="0.01" required/></div></div><div className="grid2"><div><label>Category</label><select name="category" required><option>Security</option><option>Cleaning</option><option>Electricity</option><option>Water</option><option>Repairs</option><option>Lift</option><option>Common Area</option><option>Other</option></select></div><div><label>Payment Mode</label><select name="payment_mode"><option>UPI</option><option>Bank Transfer</option><option>Cash</option><option>Cheque</option></select></div></div><div className="grid2"><div><label>Vendor Name</label><input name="vendor_name" placeholder="Vendor / shop name"/></div><div><label>Paid By</label><input name="paid_by" placeholder="Treasurer / committee member"/></div></div><label>Description</label><textarea name="description" placeholder="Short note"></textarea><label>Bill URL</label><input name="bill_url" placeholder="Paste Google Drive / invoice link for now"/><button className="btn">Save Expense</button><p className="muted">{msg}</p></form></div><div className="card"><div className="header"><div><h2>Monthly Expenses</h2><p><b>Total:</b> {money(total)}</p></div><div className="mobile-actions"><input type="month" value={month} onChange={e=>setMonth(e.target.value)}/><a className="btn secondary" download={`expenses-${month}.csv`} href={`data:text/csv;charset=utf-8,${encodeURIComponent(csv)}`}>Download CSV</a></div></div><table className="table"><thead><tr><th>Date</th><th>Category</th><th>Vendor</th><th>Amount</th></tr></thead><tbody>{items.map(x=><tr key={x.id}><td>{x.expense_date}</td><td>{x.category}</td><td>{x.vendor_name}</td><td>{money(Number(x.amount))}</td></tr>)}</tbody></table></div></main>
+ const categoryTotals=useMemo(()=>{
+   const map:Record<string,number>={}
+   items.forEach(x=>map[x.category]=(map[x.category]||0)+Number(x.amount||0))
+   return Object.entries(map).sort((a,b)=>b[1]-a[1])
+ },[items])
+
+ return <main className="wrap">
+  <div className="header"><div><h1>Expenses</h1><p className="muted">Add, edit, and delete monthly expenses.</p></div><a className="btn secondary" href="/admin">Back</a></div>
+
+  <div className="card">
+   <h2>{isEditing?'Edit Expense':'Add Expense'}</h2>
+   <form onSubmit={submit} className="grid">
+    <div className="grid2"><div><label>Date</label><input name="expense_date" type="date" value={form.expense_date} onChange={e=>updateField('expense_date',e.target.value)} required/></div><div><label>Amount</label><input name="amount" type="number" min="0" step="0.01" value={form.amount} onChange={e=>updateField('amount',e.target.value)} required/></div></div>
+    <div className="grid2"><div><label>Category</label><select name="category" value={form.category} onChange={e=>updateField('category',e.target.value)} required>{EXPENSE_CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}</select></div><div><label>Payment Mode</label><select name="payment_mode" value={form.payment_mode} onChange={e=>updateField('payment_mode',e.target.value)}><option>UPI</option><option>Bank Transfer</option><option>Cash</option><option>Cheque</option></select></div></div>
+    <div className="grid2"><div><label>Vendor Name</label><input name="vendor_name" value={form.vendor_name||''} onChange={e=>updateField('vendor_name',e.target.value)} placeholder="Vendor / shop name"/></div><div><label>Paid By</label><input name="paid_by" value={form.paid_by||''} onChange={e=>updateField('paid_by',e.target.value)} placeholder="Treasurer / committee member"/></div></div>
+    <label>Description</label><textarea name="description" value={form.description||''} onChange={e=>updateField('description',e.target.value)} placeholder="Short note"></textarea>
+    <label>Bill URL</label><input name="bill_url" value={form.bill_url||''} onChange={e=>updateField('bill_url',e.target.value)} placeholder="Paste Google Drive / invoice link for now"/>
+    <div className="mobile-actions"><button className="btn">{isEditing?'Update Expense':'Save Expense'}</button>{isEditing&&<button type="button" className="btn secondary" onClick={resetForm}>Cancel Edit</button>}</div>
+    <p className="muted">{msg}</p>
+   </form>
+  </div>
+
+  <div className="card"><div className="header"><div><h2>Monthly Expenses</h2><p><b>Total:</b> {money(total)}</p></div><div className="mobile-actions"><input type="month" value={month} onChange={e=>setMonth(e.target.value)}/><a className="btn secondary" download={`expenses-${month}.csv`} href={`data:text/csv;charset=utf-8,${encodeURIComponent(csv)}`}>Download CSV</a></div></div>
+   {categoryTotals.length>0&&<div className="category-pills">{categoryTotals.slice(0,6).map(([cat,amt])=><span key={cat}>{cat}: <b>{money(amt)}</b></span>)}</div>}
+   <table className="table"><thead><tr><th>Date</th><th>Category</th><th>Amount</th><th>Actions</th></tr></thead><tbody>{items.map(x=><tr key={x.id}><td>{x.expense_date}</td><td><b>{x.category}</b><br/><small className="muted">{x.description||x.vendor_name}</small></td><td>{money(Number(x.amount))}</td><td><div className="row-actions"><button className="mini-btn" onClick={()=>editExpense(x)}>Edit</button><button className="mini-btn danger" onClick={()=>deleteExpense(x)}>Delete</button></div></td></tr>)}</tbody></table>
+  </div>
+ </main>
 }

@@ -4,7 +4,7 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
 const DEFAULT_SETTINGS = {
   id: 1,
-  start_date: '2025-02-06',
+  start_date: '2026-02-06',
   opening_balance: 0,
   notes: 'Opening balance from the date treasurer took charge'
 }
@@ -26,7 +26,7 @@ export async function POST(req:NextRequest){
     const b=await req.json()
     const row={
       id:1,
-      start_date: b.start_date || '2025-02-06',
+      start_date: b.start_date || '2026-02-06',
       opening_balance: Number(b.opening_balance||0),
       notes: b.notes || '',
       updated_at: new Date().toISOString()

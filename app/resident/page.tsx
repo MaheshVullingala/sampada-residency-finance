@@ -1,25 +1,117 @@
 'use client'
-import { useEffect, useMemo, useState } from 'react'
-import { money, ym } from '@/lib/money'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { money } from '@/lib/money'
 import TopBar from '@/components/TopBar'
 
 type Expense={expense_date:string,category:string,vendor_name:string,amount:number,payment_mode:string,description:string,bill_url:string}
-type Summary={month:string,start_date?:string,has_data?:boolean,message?:string,opening_balance:number,maintenance_collected:number,other_income:number,total_expenses:number,closing_balance:number,expenses:Expense[],trend:{month:string,total_expenses:number}[]}
+type PendingDue={flat_no:string,maintenance_pending:number,emergency_pending:number,other_pending:number,total_pending:number}
+type Summary={month:string,start_date?:string,has_data?:boolean,message?:string,opening_balance:number,maintenance_collected:number,total_expenses:number,closing_balance:number,expenses:Expense[],trend:{month:string,total_expenses:number}[],pending_dues?:PendingDue[],collections_by_type?:{charge_type:string,amount:number}[],bank_statement?:{file_name:string,file_url:string}|null}
+
+type DueTab='maintenance'|'emergency'|'other'
+type MainTab='collections'|'pending'
+
+const BOOKS_CLOSED_DAY = 29
+
+function defaultResidentMonth(){
+ const date = new Date()
+ if(date.getDate() < BOOKS_CLOSED_DAY) date.setMonth(date.getMonth()-1)
+ return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}`
+}
+
+function displayMonth(month:string){
+ const [year,value]=month.split('-').map(Number)
+ return new Date(year,value-1,1).toLocaleString('en-IN',{month:'long',year:'numeric'})
+}
+
 function pct(v:number,total:number){return total?Math.round((v/total)*100):0}
 function shortMonth(m:string){const [y,mo]=m.split('-').map(Number); return new Date(y,mo-1,1).toLocaleString('en-IN',{month:'short'})}
+function Accordion({title,subtitle,defaultOpen=false,children}:{title:string,subtitle?:string,defaultOpen?:boolean,children:React.ReactNode}){
+ const [open,setOpen]=useState(defaultOpen)
+ return <section className="accordion-card"><button className="accordion-head" onClick={()=>setOpen(!open)}><span><b>{title}</b>{subtitle&&<small>{subtitle}</small>}</span><i>{open?'−':'+'}</i></button>{open&&<div className="accordion-body">{children}</div>}</section>
+}
+
 export default function Resident(){
- const [logged,setLogged]=useState(false), [err,setErr]=useState(''), [month,setMonth]=useState(ym()), [summary,setSummary]=useState<Summary|null>(null)
- async function login(e:React.FormEvent<HTMLFormElement>){e.preventDefault(); setErr(''); const fd=new FormData(e.currentTarget); const r=await fetch('/api/resident/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.fromEntries(fd.entries()))}); if(r.ok){setLogged(true); load()} else setErr('Invalid flat number or PIN')}
+ const [logged,setLogged]=useState(false)
+ const [err,setErr]=useState('')
+ const [month,setMonth]=useState(defaultResidentMonth())
+ const monthInputRef=useRef<HTMLInputElement>(null)
+ const [summary,setSummary]=useState<Summary|null>(null)
+ const [duesTab,setDuesTab]=useState<DueTab>('maintenance')
+ const [collectionTab,setCollectionTab]=useState<MainTab>('collections')
+
+ async function login(e:React.FormEvent<HTMLFormElement>){
+  e.preventDefault(); setErr('')
+  const fd=new FormData(e.currentTarget)
+  const r=await fetch('/api/resident/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.fromEntries(fd.entries()))})
+  if(r.ok){setLogged(true); load()} else setErr('Invalid flat number or PIN')
+ }
  async function load(){const r=await fetch(`/api/resident/summary?month=${month}`); if(r.ok){setLogged(true); setSummary(await r.json())}}
  useEffect(()=>{load()},[month])
- const categories=useMemo(()=>{const map:Record<string,number>={}; (summary?.expenses||[]).forEach(x=>map[x.category]=(map[x.category]||0)+Number(x.amount)); return Object.entries(map).sort((a,b)=>b[1]-a[1])},[summary])
- const top=useMemo(()=>[...(summary?.expenses||[])].sort((a,b)=>Number(b.amount)-Number(a.amount)).slice(0,5),[summary])
+
+ const expenseCategories=useMemo(()=>{
+  const map:Record<string,number>={}
+  ;(summary?.expenses||[]).forEach(x=>map[x.category]=(map[x.category]||0)+Number(x.amount||0))
+  return Object.entries(map).sort((a,b)=>b[1]-a[1])
+ },[summary])
+
+ const pendingTotals=useMemo(()=>{
+  const rows=summary?.pending_dues||[]
+  return {
+   maintenance: rows.reduce((s,x)=>s+Number(x.maintenance_pending||0),0),
+   emergency: rows.reduce((s,x)=>s+Number(x.emergency_pending||0),0),
+   other: rows.reduce((s,x)=>s+Number(x.other_pending||0),0),
+   total: rows.reduce((s,x)=>s+Number(x.total_pending||0),0)
+  }
+ },[summary])
+
+ const availableDuesTabs=useMemo(()=>{
+  const tabs:Array<{key:DueTab,label:string,total:number}>=[
+   {key:'maintenance',label:'Monthly Maintenance',total:pendingTotals.maintenance},
+   {key:'emergency',label:'Emergency Fund',total:pendingTotals.emergency},
+   {key:'other',label:'Others',total:pendingTotals.other}
+  ]
+  return tabs.filter(t=>t.total>0)
+ },[pendingTotals])
+ useEffect(()=>{if(availableDuesTabs.length && !availableDuesTabs.find(t=>t.key===duesTab)) setDuesTab(availableDuesTabs[0].key)},[availableDuesTabs,duesTab])
+ function dueAmount(x:PendingDue){return duesTab==='maintenance'?Number(x.maintenance_pending||0):duesTab==='emergency'?Number(x.emergency_pending||0):Number(x.other_pending||0)}
+
  const maxTrend=Math.max(...(summary?.trend||[]).map(x=>x.total_expenses),1)
- if(!logged) return <><TopBar/><main className="wrap"><div className="card login-card"><h1>Sampada Residency Financials</h1><p className="muted">Enter your Flat No and PIN to see monthly expenses and balances. No personal details are required.</p><form onSubmit={login} className="grid"><label>Flat No</label><input name="flat_no" placeholder="A-204" required/><label>PIN</label><input name="pin" type="password" inputMode="numeric" placeholder="PIN" required/><button className="btn">View Statement</button>{err&&<p style={{color:'crimson'}}>{err}</p>}</form></div></main></>
- return <><TopBar/><main className="wrap"><div className="header"><div><h1>Monthly Statement</h1><p className="muted">View-only association financial summary.</p></div><input type="month" value={month} onChange={e=>setMonth(e.target.value)}/></div>{summary?.has_data===false&&<div className="card"><h2>No data for this month</h2><p className="muted">{summary.message || 'No records are available for the selected month.'}</p><p>Please select a month from {summary.start_date?.slice(0,7) || 'the start month'} onwards.</p></div>}{summary&&summary.has_data!==false&&<>
- <div className="card"><h2>Financial Summary</h2><div className="grid2"><div className="stat blue"><span>Opening Balance</span><br/><b>{money(summary.opening_balance)}</b></div><div className="stat green"><span>Maintenance Collected</span><br/><b>{money(summary.maintenance_collected)}</b></div><div className="stat purple"><span>Other Income</span><br/><b>{money(summary.other_income)}</b></div><div className="stat orange"><span>Total Expenses</span><br/><b>{money(summary.total_expenses)}</b></div></div><div className="flow"><span>{money(summary.opening_balance)}</span><b>+</b><span>{money(summary.maintenance_collected+summary.other_income)}</span><b>-</b><span>{money(summary.total_expenses)}</span><b>=</b><strong>{money(summary.closing_balance)}</strong></div><div className="closing">Closing Balance: <b>{money(summary.closing_balance)}</b></div></div>
- <div className="card"><h2>Where Maintenance Money Went</h2><div className="chart-row"><div className="donut"><div>{pct(summary.total_expenses,summary.maintenance_collected+summary.other_income)}%<small>spent</small></div></div><div className="bars">{categories.map(([cat,amt])=><div key={cat} className="bar-line"><div><b>{cat}</b><span>{money(amt)}</span></div><div className="bar"><i style={{width:`${pct(amt,summary.total_expenses)}%`}}/></div></div>)}</div></div></div>
- <div className="card"><h2>Monthly Expense Trend</h2><div className="trend">{(summary.trend||[]).map(t=><div key={t.month} className="trend-item"><div className="trend-bar" style={{height:`${Math.max(8,(t.total_expenses/maxTrend)*120)}px`}}/><span>{shortMonth(t.month)}</span><small>{money(t.total_expenses)}</small></div>)}</div></div>
- <div className="card"><h2>Top Expenses This Month</h2>{top.map((x,i)=><div className="list-item" key={i}><span>{i+1}. {x.category}<small>{x.description||x.vendor_name}</small></span><b>{money(Number(x.amount))}</b></div>)}</div>
- <div className="card"><h2>Expense List</h2><table className="table compact-expense-table"><thead><tr><th>Date</th><th>Category</th><th>Amount</th></tr></thead><tbody>{summary.expenses.map((x,i)=><tr key={i}><td>{x.expense_date}</td><td>{x.category}</td><td>{money(Number(x.amount))}</td></tr>)}</tbody></table></div><div className="footer-note">© 2026 Sampada Residency, Bangalore. Made with 💚 for our community</div></>}</main></>
+ const totalInflow=(summary?.maintenance_collected||0)
+ const spentPct=pct(summary?.total_expenses||0,totalInflow)
+
+ if(!logged) return <><TopBar/><main className="wrap"><div className="card login-card"><h1>Sampada Residency Financials</h1><p className="muted">Enter your Flat No and PIN to see monthly expenses and balances. No personal details are required.</p><form onSubmit={login} className="grid"><label>Flat No</label><input name="flat_no" placeholder="A1" required/><label>PIN</label><input name="pin" type="password" inputMode="numeric" placeholder="PIN" required/><button className="btn">View Statement</button>{err&&<p style={{color:'crimson'}}>{err}</p>}</form></div></main></>
+
+ return <><TopBar/><main className="wrap resident-wrap"><div className="header"><div><h1>Resident Statement</h1><p className="muted">Transparent financial summary for Sampada Residency, Bangalore.</p></div><div className="month-picker-wrap"><button type="button" className="month-picker-button" onClick={()=>{const input=monthInputRef.current;if(!input)return;try{input.showPicker()}catch{input.focus();input.click()}}} aria-label="Choose statement month"><span>📅</span><strong>{displayMonth(month)}</strong><span>⌄</span></button><input ref={monthInputRef} className="month-picker-native" type="month" value={month} onChange={e=>setMonth(e.target.value)}/><small>Latest finalized month shown by default</small></div></div>
+  {summary?.has_data===false&&<div className="card"><h2>No data for this month</h2><p className="muted">{summary.message || 'No records are available for the selected month.'}</p><p>Please select a month from {summary.start_date?.slice(0,7) || 'the start month'} onwards.</p></div>}
+  {summary&&summary.has_data!==false&&<>
+   <Accordion title="📊 Financial Summary" subtitle="Opening + collections − expenses = closing" defaultOpen>
+    <div className="summary-hero"><div><span>Closing Balance</span><strong>{money(summary.closing_balance)}</strong><small>For {month}</small></div></div>
+    <div className="grid2"><div className="stat blue"><span>Opening Balance</span><br/><b>{money(summary.opening_balance)}</b></div><div className="stat green"><span>Total Collections</span><br/><b>{money(summary.maintenance_collected)}</b></div><div className="stat orange"><span>Expenses</span><br/><b>{money(summary.total_expenses)}</b></div><div className="stat purple"><span>Closing Balance</span><br/><b>{money(summary.closing_balance)}</b></div></div>
+    <div className="flow"><span>{money(summary.opening_balance)}</span><b>+</b><span>{money(summary.maintenance_collected)}</span><b>-</b><span>{money(summary.total_expenses)}</span><b>=</b><strong>{money(summary.closing_balance)}</strong></div>
+    {summary.bank_statement&&<div className="bank-statement-box"><div><b>📄 {summary.bank_statement.file_name || 'Bank Statement'}</b><small>Statement for {month}</small></div><div className="row-actions"><a className="mini-btn" href={summary.bank_statement.file_url} target="_blank" rel="noreferrer">View</a><a className="mini-btn" href={summary.bank_statement.file_url} download>Download</a></div></div>}
+   </Accordion>
+
+   <Accordion title="💰 Collections & Pending Dues" subtitle="Collected amount and flat-wise pending dues" defaultOpen>
+    <div className="section-tabs"><button className={collectionTab==='collections'?'active':''} onClick={()=>setCollectionTab('collections')}>Collections</button><button className={collectionTab==='pending'?'active':''} onClick={()=>setCollectionTab('pending')}>Pending Dues</button></div>
+    {collectionTab==='collections'&&<div>
+     <div className="grid2"><div className="stat green"><span>Total Collections</span><br/><b>{money(summary.maintenance_collected)}</b></div></div>
+     {(summary.collections_by_type||[]).length===0?<p className="muted">No collection entries have been added for this month.</p>:<div className="bars collection-list"><h3>Maintenance Collections</h3>{summary.collections_by_type?.map(x=><div key={x.charge_type} className="bar-line"><div><b>{x.charge_type}</b><span>{money(x.amount)}</span></div><div className="bar"><i style={{width:`${pct(x.amount,summary.maintenance_collected)}%`}}/></div></div>)}</div>}
+    </div>}
+    {collectionTab==='pending'&&<div>
+     {availableDuesTabs.length===0?<p className="success-empty">No pending dues 🎉</p>:<><div className="grid2"><div className="stat orange"><span>Pending Flats</span><br/><b>{summary.pending_dues?.length||0}</b></div><div className="stat purple"><span>Total Pending</span><br/><b>{money(pendingTotals.total)}</b></div></div><div className="tabs">{availableDuesTabs.map(t=><button key={t.key} className={duesTab===t.key?'active':''} onClick={()=>setDuesTab(t.key)}>{t.label}<small>{money(t.total)}</small></button>)}</div><div className="pending-list">{(summary.pending_dues||[]).filter(x=>dueAmount(x)>0).map((x,i)=><div className="pending-row" key={i}><b>{x.flat_no}</b><span>{money(dueAmount(x))}</span></div>)}</div><p className="muted">Includes previous month dues until admin marks them paid.</p></>}
+    </div>}
+   </Accordion>
+
+   <Accordion title="💳 Expenses" subtitle="Category-wise expense summary">
+    <div className="grid2"><div className="stat orange"><span>Total Expenses</span><br/><b>{money(summary.total_expenses)}</b></div><div className="stat blue"><span>Categories</span><br/><b>{expenseCategories.length}</b></div></div>
+    {expenseCategories.length===0?<p className="muted">No expenses for this month.</p>:<div className="expense-category-list">{expenseCategories.map(([cat,amt])=><div className="expense-category-row" key={cat}><span>{cat}</span><b>{money(amt)}</b></div>)}</div>}
+   </Accordion>
+
+   <Accordion title="📈 Analytics & Charts" subtitle="Trends and visual breakdown">
+    <div className="chart-row"><div className="donut"><div>{spentPct}%<small>spent</small></div></div><div className="bars">{expenseCategories.map(([cat,amt])=><div key={cat} className="bar-line"><div><b>{cat}</b><span>{money(amt)}</span></div><div className="bar"><i style={{width:`${pct(amt,summary.total_expenses)}%`}}/></div></div>)}</div></div>
+    <h3>Monthly Expense Trend</h3><div className="trend">{(summary.trend||[]).map(t=><div key={t.month} className="trend-item"><div className="trend-bar" style={{height:`${Math.max(8,(t.total_expenses/maxTrend)*120)}px`}}/><span>{shortMonth(t.month)}</span><small>{money(t.total_expenses)}</small></div>)}</div>
+   </Accordion>
+   <div className="footer-note">© 2026 Sampada Residency, Bangalore. Made with 💚 for our community</div>
+  </>}
+ </main></>
 }

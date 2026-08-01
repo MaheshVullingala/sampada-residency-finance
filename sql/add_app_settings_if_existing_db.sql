@@ -11,3 +11,5 @@ alter table app_settings enable row level security;
 insert into app_settings (id, start_date, opening_balance, notes)
 values (1, '2025-02-06', 0, 'Opening balance from the date treasurer took charge')
 on conflict (id) do nothing;
+
+

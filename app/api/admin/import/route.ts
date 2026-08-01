@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { isAdmin } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { normalizeExpenseCategory } from '@/lib/categories'
 function n(v:any){return Number(String(v ?? '0').replace(/[^0-9.-]/g,'')) || 0}
 function clean(v:any){return String(v ?? '').trim()}
 function pad(v:number){return String(v).padStart(2,'0')}
@@ -26,7 +27,7 @@ export async function POST(req:NextRequest){
  if(!(await isAdmin())) return NextResponse.json({error:'Unauthorized'},{status:401})
  const body=await req.json(); const type=body.type; const rows=Array.isArray(body.rows)?body.rows:[]; const sb=supabaseAdmin()
  if(type==='expenses'){
-  const mapped=rows.map((r:any)=>({expense_date:parseDate(r.expense_date||r.date||r['Expense Date']||r['Date']),category:clean(r.category||r['Expense Category']||r['Category'])||'Other',description:clean(r.description||r['Expense Description']||r['Description']),amount:n(r.amount||r['Expense Amount']||r['Amount']),vendor_name:clean(r.vendor_name||r.vendor||r['Vendor Name']||r['Vendor']),payment_mode:clean(r.payment_mode||r['Payment Mode'])||'Bank Transfer',paid_by:clean(r.paid_by||r['Paid By']),bill_url:clean(r.bill_url||r['Bill URL']||r['Bill Link']),status:'approved'})).filter((r:any)=>r.expense_date&&r.amount>0)
+  const mapped=rows.map((r:any)=>({expense_date:parseDate(r.expense_date||r.date||r['Expense Date']||r['Date']),category:normalizeExpenseCategory(r.category||r['Expense Category']||r['Category']),description:clean(r.description||r['Expense Description']||r['Description']),amount:n(r.amount||r['Expense Amount']||r['Amount']),vendor_name:clean(r.vendor_name||r.vendor||r['Vendor Name']||r['Vendor']),payment_mode:clean(r.payment_mode||r['Payment Mode'])||'Bank Transfer',paid_by:clean(r.paid_by||r['Paid By']),bill_url:clean(r.bill_url||r['Bill URL']||r['Bill Link']),status:'approved'})).filter((r:any)=>r.expense_date&&r.amount>0)
   if(!mapped.length) return NextResponse.json({error:'No valid expense rows found'},{status:400})
   const {error}=await sb.from('expenses').insert(mapped); if(error) return NextResponse.json({error:error.message},{status:500}); return NextResponse.json({imported:mapped.length})
  }
