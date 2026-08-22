@@ -1,15 +1,16 @@
 'use client'
 import { useEffect, useMemo, useState } from 'react'
 import { money, ym } from '@/lib/money'
-import { EXPENSE_CATEGORIES } from '@/lib/categories'
 
 type Expense={id:string,expense_date:string,category:string,vendor_name:string,amount:number,payment_mode:string,paid_by:string,description:string,bill_url:string,status:string}
+type Category={id:number,name:string}
 
-const emptyForm={id:'',expense_date:'',category:EXPENSE_CATEGORIES[0]||'',vendor_name:'',amount:'',payment_mode:'UPI',paid_by:'',description:'',bill_url:'',status:'approved'}
+const emptyForm={id:'',expense_date:'',category:'',vendor_name:'',amount:'',payment_mode:'UPI',paid_by:'',description:'',bill_url:'',status:'approved'}
 
 export default function Expenses(){
  const [month,setMonth]=useState(ym())
  const [items,setItems]=useState<Expense[]>([])
+ const [categories,setCategories]=useState<Category[]>([])
  const [msg,setMsg]=useState('')
  const [form,setForm]=useState<any>(emptyForm)
  const [isEditing,setIsEditing]=useState(false)
@@ -19,10 +20,20 @@ export default function Expenses(){
   const j=await r.json()
   setItems(j.expenses||[])
  }
+ async function loadCategories(){
+  const r=await fetch('/api/admin/expense-categories')
+  const j=await r.json()
+  if(r.ok){
+   const list:Category[]=j.categories||[]
+   setCategories(list)
+   setForm((f:any)=>({...f,category:f.category||list[0]?.name||''}))
+  } else setMsg(j.error||'Could not load expense categories')
+ }
  useEffect(()=>{load()},[month])
+ useEffect(()=>{loadCategories()},[])
 
  function updateField(name:string,value:string){setForm((f:any)=>({...f,[name]:value}))}
- function resetForm(){setForm(emptyForm); setIsEditing(false); setMsg('')}
+ function resetForm(){setForm({...emptyForm,category:categories[0]?.name||''}); setIsEditing(false); setMsg('')}
  function editExpense(x:Expense){
   setForm({...x, amount:String(x.amount||'')})
   setIsEditing(true)
@@ -34,7 +45,12 @@ export default function Expenses(){
   setMsg(isEditing?'Updating...':'Saving...')
   const method=isEditing?'PUT':'POST'
   const r=await fetch('/api/admin/expenses',{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(form)})
-  if(r.ok){setMsg(isEditing?'Expense updated':'Expense saved'); resetForm(); load()} else {const j=await r.json().catch(()=>({})); setMsg(j.error||'Could not save')}
+  if(r.ok){
+   setIsEditing(false)
+   setForm({...emptyForm,category:categories[0]?.name||''})
+   setMsg(isEditing?'Expense updated':'Expense saved')
+   load()
+  } else {const j=await r.json().catch(()=>({})); setMsg(j.error||'Could not save')}
  }
 
  async function deleteExpense(x:Expense){
@@ -60,11 +76,11 @@ export default function Expenses(){
    <h2>{isEditing?'Edit Expense':'Add Expense'}</h2>
    <form onSubmit={submit} className="grid">
     <div className="grid2"><div><label>Date</label><input name="expense_date" type="date" value={form.expense_date} onChange={e=>updateField('expense_date',e.target.value)} required/></div><div><label>Amount</label><input name="amount" type="number" min="0" step="0.01" value={form.amount} onChange={e=>updateField('amount',e.target.value)} required/></div></div>
-    <div className="grid2"><div><label>Category</label><select name="category" value={form.category} onChange={e=>updateField('category',e.target.value)} required>{EXPENSE_CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}</select></div><div><label>Payment Mode</label><select name="payment_mode" value={form.payment_mode} onChange={e=>updateField('payment_mode',e.target.value)}><option>UPI</option><option>Bank Transfer</option><option>Cash</option><option>Cheque</option></select></div></div>
+    <div className="grid2"><div><label>Category</label><select name="category" value={form.category} onChange={e=>updateField('category',e.target.value)} required disabled={categories.length===0}>{categories.map(cat => <option key={cat.id} value={cat.name}>{cat.name}</option>)}</select>{categories.length===0&&<small className="muted">Loading categories...</small>}</div><div><label>Payment Mode</label><select name="payment_mode" value={form.payment_mode} onChange={e=>updateField('payment_mode',e.target.value)}><option>UPI</option><option>Bank Transfer</option><option>Cash</option><option>Cheque</option></select></div></div>
     <div className="grid2"><div><label>Vendor Name</label><input name="vendor_name" value={form.vendor_name||''} onChange={e=>updateField('vendor_name',e.target.value)} placeholder="Vendor / shop name"/></div><div><label>Paid By</label><input name="paid_by" value={form.paid_by||''} onChange={e=>updateField('paid_by',e.target.value)} placeholder="Treasurer / committee member"/></div></div>
     <label>Description</label><textarea name="description" value={form.description||''} onChange={e=>updateField('description',e.target.value)} placeholder="Short note"></textarea>
     <label>Bill URL</label><input name="bill_url" value={form.bill_url||''} onChange={e=>updateField('bill_url',e.target.value)} placeholder="Paste Google Drive / invoice link for now"/>
-    <div className="mobile-actions"><button className="btn">{isEditing?'Update Expense':'Save Expense'}</button>{isEditing&&<button type="button" className="btn secondary" onClick={resetForm}>Cancel Edit</button>}</div>
+    <div className="mobile-actions"><button className="btn" disabled={categories.length===0}>{isEditing?'Update Expense':'Save Expense'}</button>{isEditing&&<button type="button" className="btn secondary" onClick={resetForm}>Cancel Edit</button>}</div>
     <p className="muted">{msg}</p>
    </form>
   </div>
