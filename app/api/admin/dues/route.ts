@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
   if (!Number.isFinite(amount) || amount <= 0) return NextResponse.json({ error: 'Amount must be greater than zero' }, { status: 400 })
 
   const sb = supabaseAdmin()
-  const { data: charge, error: chargeError } = await sb.from('charges').insert({ month, charge_type, amount, notes: body.notes || null }).select('*').single()
+  const { data: charge, error: chargeError } = await sb.from('charges').insert({ month, charge_type, amount_per_flat: amount, notes: body.notes || null }).select('*').single()
   if (chargeError) return NextResponse.json({ error: chargeError.message }, { status: 500 })
 
   const { data: flats, error: flatsError } = await sb.from('flats').select('flat_no').order('flat_no')
