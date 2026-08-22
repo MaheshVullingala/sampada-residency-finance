@@ -24,7 +24,7 @@ export default function FixedDepositSummary({month,totalFunds}:{month:string,tot
  return <div style={{marginTop:16}}>
   <h3>Fund Allocation</h3>
   <div className="grid2">
-   <div className="stat blue"><span>Available Bank Balance</span><br/><b>{money(available)}</b></div>
+   <div className="stat blue"><span>Available Bank Balance + Petty Cash</span><br/><b>{money(available)}</b></div>
    <div className="stat green"><span>Fixed Deposits</span><br/><b>{money(fdTotal)}</b></div>
   </div>
   <p className="muted">Fixed deposits are part of the association&apos;s total funds and are not treated as expenses.</p>
