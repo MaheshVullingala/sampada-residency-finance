@@ -10,11 +10,8 @@ type Summary={month:string,start_date?:string,has_data?:boolean,message?:string,
 type DueTab='maintenance'|'emergency'|'other'
 type MainTab='collections'|'pending'
 
-const BOOKS_CLOSED_DAY = 29
-
 function defaultResidentMonth(){
  const date = new Date()
- if(date.getDate() < BOOKS_CLOSED_DAY) date.setMonth(date.getMonth()-1)
  return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}`
 }
 
@@ -81,7 +78,7 @@ export default function Resident(){
 
  if(!logged) return <><TopBar/><main className="wrap"><div className="card login-card"><h1>Sampada Residency Financials</h1><p className="muted">Enter your Flat No and PIN to see monthly expenses and balances. No personal details are required.</p><form onSubmit={login} className="grid"><label>Flat No</label><input name="flat_no" placeholder="A1" required/><label>PIN</label><input name="pin" type="password" inputMode="numeric" placeholder="PIN" required/><button className="btn">View Statement</button>{err&&<p style={{color:'crimson'}}>{err}</p>}</form></div></main></>
 
- return <><TopBar/><main className="wrap resident-wrap"><div className="header"><div><h1>Resident Statement</h1><p className="muted">Transparent financial summary for Sampada Residency, Bangalore.</p></div><div className="month-picker-wrap"><button type="button" className="month-picker-button" onClick={()=>{const input=monthInputRef.current;if(!input)return;try{input.showPicker()}catch{input.focus();input.click()}}} aria-label="Choose statement month"><span>📅</span><strong>{displayMonth(month)}</strong><span>⌄</span></button><input ref={monthInputRef} className="month-picker-native" type="month" value={month} onChange={e=>setMonth(e.target.value)}/><small>Latest finalized month shown by default</small></div></div>
+ return <><TopBar/><main className="wrap resident-wrap"><div className="header"><div><h1>Resident Statement</h1><p className="muted">Transparent financial summary for Sampada Residency, Bangalore.</p></div><div className="month-picker-wrap"><button type="button" className="month-picker-button" onClick={()=>{const input=monthInputRef.current;if(!input)return;try{input.showPicker()}catch{input.focus();input.click()}}} aria-label="Choose statement month"><span>📅</span><strong>{displayMonth(month)}</strong><span>⌄</span></button><input ref={monthInputRef} className="month-picker-native" type="month" value={month} onChange={e=>setMonth(e.target.value)}/><small>Current month shown by default</small></div></div>
   {summary?.has_data===false&&<div className="card"><h2>No data for this month</h2><p className="muted">{summary.message || 'No records are available for the selected month.'}</p><p>Please select a month from {summary.start_date?.slice(0,7) || 'the start month'} onwards.</p></div>}
   {summary&&summary.has_data!==false&&<>
    <Accordion title="📊 Financial Summary" subtitle="Opening + collections − expenses = closing" defaultOpen>
