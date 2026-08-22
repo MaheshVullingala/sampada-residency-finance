@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { money } from '@/lib/money'
 import TopBar from '@/components/TopBar'
+import FixedDepositSummary from '@/components/FixedDepositSummary'
 
 type Expense={expense_date:string,category:string,vendor_name:string,amount:number,payment_mode:string,description:string,bill_url:string}
 type PendingDue={flat_no:string,maintenance_pending:number,emergency_pending:number,other_pending:number,total_pending:number}
@@ -81,10 +82,11 @@ export default function Resident(){
  return <><TopBar/><main className="wrap resident-wrap"><div className="header"><div><h1>Resident Statement</h1><p className="muted">Transparent financial summary for Sampada Residency, Bangalore.</p></div><div className="month-picker-wrap"><button type="button" className="month-picker-button" onClick={()=>{const input=monthInputRef.current;if(!input)return;try{input.showPicker()}catch{input.focus();input.click()}}} aria-label="Choose statement month"><span>📅</span><strong>{displayMonth(month)}</strong><span>⌄</span></button><input ref={monthInputRef} className="month-picker-native" type="month" value={month} onChange={e=>setMonth(e.target.value)}/><small>Current month shown by default</small></div></div>
   {summary?.has_data===false&&<div className="card"><h2>No data for this month</h2><p className="muted">{summary.message || 'No records are available for the selected month.'}</p><p>Please select a month from {summary.start_date?.slice(0,7) || 'the start month'} onwards.</p></div>}
   {summary&&summary.has_data!==false&&<>
-   <Accordion title="📊 Financial Summary" subtitle="Opening + collections − expenses = closing" defaultOpen>
-    <div className="summary-hero"><div><span>Closing Balance</span><strong>{money(summary.closing_balance)}</strong><small>For {month}</small></div></div>
-    <div className="grid2"><div className="stat blue"><span>Opening Balance</span><br/><b>{money(summary.opening_balance)}</b></div><div className="stat green"><span>Total Collections</span><br/><b>{money(summary.maintenance_collected)}</b></div><div className="stat orange"><span>Expenses</span><br/><b>{money(summary.total_expenses)}</b></div><div className="stat purple"><span>Closing Balance</span><br/><b>{money(summary.closing_balance)}</b></div></div>
+   <Accordion title="📊 Financial Summary" subtitle="Opening + collections − expenses = total funds" defaultOpen>
+    <div className="summary-hero"><div><span>Total Association Funds</span><strong>{money(summary.closing_balance)}</strong><small>For {month}</small></div></div>
+    <div className="grid2"><div className="stat blue"><span>Opening Balance</span><br/><b>{money(summary.opening_balance)}</b></div><div className="stat green"><span>Total Collections</span><br/><b>{money(summary.maintenance_collected)}</b></div><div className="stat orange"><span>Expenses</span><br/><b>{money(summary.total_expenses)}</b></div><div className="stat purple"><span>Total Funds</span><br/><b>{money(summary.closing_balance)}</b></div></div>
     <div className="flow"><span>{money(summary.opening_balance)}</span><b>+</b><span>{money(summary.maintenance_collected)}</span><b>-</b><span>{money(summary.total_expenses)}</span><b>=</b><strong>{money(summary.closing_balance)}</strong></div>
+    <FixedDepositSummary month={month} totalFunds={summary.closing_balance}/>
     {summary.bank_statement&&<div className="bank-statement-box"><div><b>📄 {summary.bank_statement.file_name || 'Bank Statement'}</b><small>Statement for {month}</small></div><div className="row-actions"><a className="mini-btn" href={summary.bank_statement.file_url} target="_blank" rel="noreferrer">View</a><a className="mini-btn" href={summary.bank_statement.file_url} download>Download</a></div></div>}
    </Accordion>
 
