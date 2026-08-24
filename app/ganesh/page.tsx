@@ -19,5 +19,6 @@ export default function Ganesh(){
    <div className="ganesh-dates">14–20 September 2026</div>
   </section>
   <div className="ganesh-cards">{cards.map(([icon,title,text,href])=><Link href={href} key={href} className="card ganesh-card" style={{textDecoration:'none',color:'inherit'}}><div className="ganesh-icon-badge"><span className="ganesh-card-icon">{icon}</span></div><div className="ganesh-card-copy"><h2>{title}</h2><p className="muted">{text}</p></div></Link>)}</div>
+  <div className="ganesh-runway" aria-hidden="true"><div className="ganesh-running-group"><span className="mushika-run">🐁</span><img src={GANESHA_IMAGE} alt="" className="ganesh-runner"/></div><div className="ganesh-runway-line"/></div>
  </main></>
 }
