@@ -18,16 +18,14 @@ export default function FixedDepositSummary({month,totalFunds}:{month:string,tot
   return()=>{active=false}
  },[month])
 
- if(fdTotal<=0) return null
  const available=Number(totalFunds||0)-fdTotal
 
- return <div style={{marginTop:16}}>
-  <h3>Fund Allocation</h3>
+ return <div style={{marginTop:18}}>
+  <h3 style={{marginBottom:10}}>Where the funds are</h3>
   <div className="grid2">
-   <div className="stat blue"><span>Available Bank Balance + Petty Cash</span><br/><b>{money(available)}</b></div>
-   <div className="stat green"><span>Fixed Deposits</span><br/><b>{money(fdTotal)}</b></div>
+   <div className="stat blue"><span>🏦 Bank Balance + Petty Cash</span><br/><b>{money(available)}</b></div>
+   <div className="stat green"><span>🔒 Fixed Deposits</span><br/><b>{money(fdTotal)}</b></div>
   </div>
-  <p className="muted">Fixed deposits are part of the association&apos;s total funds and are not treated as expenses.</p>
-  <div className="expense-category-list">{items.map(x=><div className="expense-category-row" key={x.id}><span><b>{x.bank_name}</b>{x.maturity_date&&<small className="muted"> · Matures {x.maturity_date}</small>}</span><b>{money(Number(x.amount))}</b></div>)}</div>
+  {items.length>0&&<div className="expense-category-list" style={{marginTop:10}}>{items.map(x=><div className="expense-category-row" key={x.id}><span><b>{x.bank_name}</b>{x.maturity_date&&<small className="muted" style={{display:'block'}}>Matures {x.maturity_date}</small>}</span><b>{money(Number(x.amount))}</b></div>)}</div>}
  </div>
 }
