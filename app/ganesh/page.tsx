@@ -17,8 +17,7 @@ export default function Ganesh(){
    <div className="ganesh-kicker">Sampada Residency Celebrations</div>
    <h1 className="ganesh-title">Ganesh Chaturthi 2026</h1>
    <div className="ganesh-dates">14–20 September 2026</div>
-   <p className="ganesh-blessing">ॐ गं गणपतये नमः · Join our community celebrations, seva, games and prasadam offerings.</p>
   </section>
-  <div className="ganesh-cards">{cards.map(([icon,title,text,href])=><Link href={href} key={href} className="card ganesh-card" style={{textDecoration:'none',color:'inherit'}}><div className="ganesh-icon-badge"><span className="ganesh-card-icon">{icon}</span></div><h2>{title}</h2><p className="muted">{text}</p></Link>)}</div>
+  <div className="ganesh-cards">{cards.map(([icon,title,text,href])=><Link href={href} key={href} className="card ganesh-card" style={{textDecoration:'none',color:'inherit'}}><div className="ganesh-icon-badge"><span className="ganesh-card-icon">{icon}</span></div><div className="ganesh-card-copy"><h2>{title}</h2><p className="muted">{text}</p></div></Link>)}</div>
  </main></>
 }
