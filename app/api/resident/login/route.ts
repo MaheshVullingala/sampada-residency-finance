@@ -16,7 +16,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { data, error } = await supabaseAdmin()
+    const db = supabaseAdmin();
+    const { data, error } = await db
       .from("flats")
       .select("*")
       .eq("flat_no", flatNo)
@@ -35,6 +36,14 @@ export async function POST(req: NextRequest) {
         { error: "Invalid Flat or PIN" },
         { status: 401 }
       );
+    }
+
+    // Track successful resident access. Tracking must never block login if the
+    // tracking table has not yet been created or a logging insert fails.
+    try {
+      await db.from("resident_report_access").insert({ flat_no: data.flat_no });
+    } catch {
+      // Intentionally ignored so resident access remains available.
     }
 
     const res = NextResponse.json({ ok: true });
