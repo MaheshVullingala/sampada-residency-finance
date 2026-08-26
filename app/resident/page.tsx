@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { money } from '@/lib/money'
 import TopBar from '@/components/TopBar'
 import FixedDepositSummary from '@/components/FixedDepositSummary'
@@ -8,6 +8,7 @@ type Expense={expense_date:string,category:string,vendor_name:string,amount:numb
 type PendingDue={flat_no:string,maintenance_pending:number,emergency_pending:number,other_pending:number,total_pending:number}
 type CollectionEntry={id:number,charge_type:string,amount:number,description:string}
 type Summary={month:string,start_date?:string,has_data?:boolean,message?:string,opening_balance:number,maintenance_collected:number,total_expenses:number,closing_balance:number,expenses:Expense[],trend:{month:string,total_expenses:number}[],pending_dues?:PendingDue[],collections_by_type?:{charge_type:string,amount:number}[],collection_entries?:CollectionEntry[],bank_statement?:{file_name:string,file_url:string}|null}
+type Notice={title:string,message:string,active:boolean}
 type DueTab='maintenance'|'emergency'|'other'
 type Panel='financial'|'collections'|'pending'|'expenses'|'analytics'|null
 
@@ -24,9 +25,11 @@ function Accordion({id,active,setActive,onOpen,title,subtitle,children}:{id:Excl
 
 export default function Resident(){
  const [logged,setLogged]=useState(false),[err,setErr]=useState(''),[month,setMonth]=useState(defaultResidentMonth()),[showMonthPicker,setShowMonthPicker]=useState(false),[activePanel,setActivePanel]=useState<Panel>(null)
- const [summary,setSummary]=useState<Summary|null>(null),[duesTab,setDuesTab]=useState<DueTab>('maintenance')
- async function login(e:React.FormEvent<HTMLFormElement>){e.preventDefault();setErr('');const fd=new FormData(e.currentTarget);const r=await fetch('/api/resident/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.fromEntries(fd.entries()))});if(r.ok){setLogged(true);load()}else setErr('Invalid flat number or PIN')}
- async function load(){const r=await fetch(`/api/resident/summary?month=${month}`);if(r.ok){setLogged(true);setSummary(await r.json())}}
+ const [summary,setSummary]=useState<Summary|null>(null),[duesTab,setDuesTab]=useState<DueTab>('maintenance'),[notice,setNotice]=useState<Notice|null>(null),[showNotice,setShowNotice]=useState(false)
+ const noticeChecked=useRef(false)
+ async function loadNotice(){if(noticeChecked.current)return;noticeChecked.current=true;const r=await fetch('/api/resident/notice');if(!r.ok)return;const j=await r.json();if(j.notice?.active&&j.notice?.message){setNotice(j.notice);setShowNotice(true)}}
+ async function login(e:React.FormEvent<HTMLFormElement>){e.preventDefault();setErr('');const fd=new FormData(e.currentTarget);const r=await fetch('/api/resident/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.fromEntries(fd.entries()))});if(r.ok){setLogged(true);await load();await loadNotice()}else setErr('Invalid flat number or PIN')}
+ async function load(){const r=await fetch(`/api/resident/summary?month=${month}`);if(r.ok){setLogged(true);setSummary(await r.json());await loadNotice()}}
  useEffect(()=>{load()},[month])
  const expenseCategories=useMemo(()=>{const map:Record<string,number>={};(summary?.expenses||[]).forEach(x=>map[x.category]=(map[x.category]||0)+Number(x.amount||0));return Object.entries(map).sort((a,b)=>b[1]-a[1])},[summary])
  const pendingTotals=useMemo(()=>{const rows=summary?.pending_dues||[];return{maintenance:rows.reduce((s,x)=>s+Number(x.maintenance_pending||0),0),emergency:rows.reduce((s,x)=>s+Number(x.emergency_pending||0),0),other:rows.reduce((s,x)=>s+Number(x.other_pending||0),0),total:rows.reduce((s,x)=>s+Number(x.total_pending||0),0)}},[summary])
@@ -44,7 +47,7 @@ export default function Resident(){
 
  if(!logged)return <><TopBar/><main className="wrap"><div className="card login-card"><h1>Sampada Residency Financials</h1><p className="muted">Enter your Flat No and PIN to see monthly expenses and balances. No personal details are required.</p><form onSubmit={login} className="grid"><label>Flat No</label><input name="flat_no" placeholder="A1" required/><label>PIN</label><input name="pin" type="password" inputMode="numeric" placeholder="PIN" required/><button className="btn">View Statement</button>{err&&<p style={{color:'crimson'}}>{err}</p>}</form></div></main></>
 
- return <><TopBar/><main className="wrap resident-wrap">
+ return <><TopBar/>{showNotice&&notice&&<div role="dialog" aria-modal="true" aria-labelledby="resident-notice-title" style={{position:'fixed',inset:0,zIndex:1000,background:'rgba(3,34,24,.55)',display:'grid',placeItems:'center',padding:18}}><div style={{width:'min(520px,100%)',maxHeight:'80vh',overflowY:'auto',background:'#fff',borderRadius:20,border:'1px solid var(--border)',boxShadow:'0 24px 70px rgba(0,0,0,.28)',padding:22,position:'relative'}}><button type="button" aria-label="Close notice" onClick={()=>setShowNotice(false)} style={{position:'absolute',right:14,top:12,width:38,height:38,borderRadius:'50%',border:'1px solid var(--border)',background:'#f8faf9',fontSize:22,cursor:'pointer'}}>×</button><div style={{fontSize:34,marginBottom:8}}>📢</div><h2 id="resident-notice-title" style={{margin:'0 42px 10px 0'}}>{notice.title}</h2><p style={{whiteSpace:'pre-wrap',lineHeight:1.55,color:'var(--muted)',marginBottom:18}}>{notice.message}</p><button type="button" className="btn" onClick={()=>setShowNotice(false)} style={{width:'100%'}}>Close</button></div></div>}<main className="wrap resident-wrap">
   <div className="header"><div><h1>Resident Statement</h1><p className="muted">Transparent financial summary for Sampada Residency, Bangalore.</p></div><div className="month-picker-wrap" style={{position:'relative',width:'100%',maxWidth:360}}><button type="button" className="month-picker-button" onClick={toggleMonthPicker} aria-expanded={showMonthPicker} aria-label="Choose statement month" style={{width:'100%'}}><span>📅</span><strong>{displayMonth(month)}</strong><span>{showMonthPicker?'⌃':'⌄'}</span></button>{showMonthPicker&&<div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginTop:8,padding:10,background:'#fff',border:'1px solid var(--border)',borderRadius:14,boxShadow:'var(--shadow)',position:'absolute',zIndex:30,width:'100%'}}><div><label style={{display:'block',marginBottom:5}}>Month</label><select value={selectedMonth} onChange={e=>changeMonthPart('month',e.target.value)}>{months.map(x=><option value={x.value} key={x.value}>{x.label}</option>)}</select></div><div><label style={{display:'block',marginBottom:5}}>Year</label><select value={selectedYear} onChange={e=>changeMonthPart('year',e.target.value)}>{years.map(y=><option value={y} key={y}>{y}</option>)}</select></div></div>}<small style={{display:'block',marginTop:5}}>Current month shown by default</small></div></div>
 
   {summary?.has_data===false&&<div className="card"><h2>No data for this month</h2><p className="muted">{summary.message||'No records are available for the selected month.'}</p></div>}
